@@ -1,0 +1,37 @@
+name: Deploy from main
+
+on:
+  push:
+    branches: [ main ]
+
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    env:
+      CLIENT_ID: ${{ secrets.CONSUMER_KEY_MAIN }}
+      USERNAME: ${{ secrets.USERNAME_MAIN }}
+      INSTANCE_URL: ${{ secrets.INSTANCE_URL_MAIN }}
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Authorize Org
+        run: |
+          curl https://developer.salesforce.com/media/salesforce-cli/sfdx/channels/stable/sfdx-linux-x64.tar.gz | tar -xz
+          ./sfdx/bin/sfdx --version
+          ./sfdx/bin/sfdx auth:jwt:grant --instanceurl $INSTANCE_URL --clientid $CLIENT_ID --username $USERNAME --jwtkeyfile $GITHUB_WORKSPACE/devops/server.key --json
+      - name: Check Deploy & Run Tests
+        run: |
+          ./sfdx/bin/sfdx force:source:deploy -x $GITHUB_WORKSPACE/package/package.xml -u $USERNAME -w 30 --checkonly --testlevel RunLocalTests --json
+      - name: Deploy
+        run: |
+          ./sfdx/bin/sfdx force:source:deploy -x $GITHUB_WORKSPACE/package/package.xml -u $USERNAME -w 30 --testlevel RunLocalTests --json
+      - name: Destructive Deploy
+        run: |
+          ./sfdx/bin/sfdx force:mdapi:deploy -d $GITHUB_WORKSPACE/destructiveChanges -u $USERNAME --ignorewarnings --json
+      - name: Logout
+        run: |
+          ./sfdx/bin/sfdx force:auth:logout -a -p
